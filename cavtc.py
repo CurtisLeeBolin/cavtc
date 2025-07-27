@@ -71,7 +71,8 @@ def create_db(db_file):
             created TIMESTAMP NOT NULL,
             working_dir TEXT NOT NULL,
             absolute_filename TEXT NOT NULL,
-            hostname TEXT NOT NULL
+            hostname TEXT NOT NULL,
+            return_msg TEXT NOT NULL
         );
         '''
     )
@@ -139,7 +140,7 @@ def add_row(db_file, table, data):
     elif table == 'completed':
         sql_str = 'INSERT INTO completed(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
     elif table == 'failed':
-        sql_str = 'INSERT INTO failed(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
+        sql_str = 'INSERT INTO failed(created, working_dir, absolute_filename, hostname, return_msg) VALUES (?, ?, ?, ?, ?)'
     else:
         raise Exception(f'Table `{table}` not found')
     connection = sqlite3.connect(db_file, timeout=30.0)
@@ -156,7 +157,7 @@ def add_rows(db_file, table, data_list):
     elif table == 'completed':
         sql_str = 'INSERT INTO completed(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
     elif table == 'failed':
-        sql_str = 'INSERT INTO failed(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
+        sql_str = 'INSERT INTO failed(created, working_dir, absolute_filename, hostname, return_msg) VALUES (?, ?, ?, ?, ?)'
     else:
         raise Exception(f'Table `{table}` not found')
     connection = sqlite3.connect(db_file, timeout=30.0)
@@ -229,16 +230,16 @@ def server(db_file):
             continue
 
         tc = avtc.AudioVideoTransCoder([],disable_lockfile=True)
-        returncode = tc.transcode(absolute_filename, working_dir)
+        return_msg = tc.transcode(absolute_filename, working_dir)
 
-        if returncode == 0:
+        if return_msg == None:
             add_row(db_file, 'completed', (created, working_dir, absolute_filename, hostname))
             del_row(db_file, 'queue', id)
             print()
         else:
-            add_row(db_file, 'failed', (created, working_dir, absolute_filename, hostname))
+            add_row(db_file, 'failed', (created, working_dir, absolute_filename, hostname, return_msg))
             del_row(db_file, 'queue', id)
-            print(f'{returncode=}')
+            print(f'{return_msg=}')
             print()
 
 
