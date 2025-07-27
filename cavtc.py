@@ -91,35 +91,38 @@ def create_db(db_file):
 
 
 def get_rows(db_file, table):
-    sql_str = ''
-    if table == 'queue':
-        sql_str = 'SELECT * FROM queue'
-    elif table == 'running':
-        sql_str = 'SELECT * FROM completed'
-    elif table == 'completed':
-        sql_str = 'SELECT * FROM completed'
-    elif table == 'failed':
-        sql_str = 'SELECT * FROM failed'
+    table_tuple = ('queue', 'running', 'completed', 'failed')
+    if table in table_tuple:
+        sql_str = f'SELECT * FROM {table}'
+        connection = sqlite3.connect(db_file, timeout=30.0)
+        cursor = connection.cursor()
+        rows = cursor.execute(sql_str).fetchall()
+        connection.close()
+        return rows
     else:
         raise Exception(f'Table `{table}` not found')
+
+
+def get_row(db_file, table):
+    table_tuple = ('queue', 'running', 'completed', 'failed')
+    if table in table_tuple:
+        sql_str = f'SELECT * FROM {table}'
+        connection = sqlite3.connect(db_file, timeout=30.0)
+        cursor = connection.cursor()
+        row = cursor.execute(sql_str).fetchone()
+        connection.close()
+        return row
+    else:
+        raise Exception(f'Table `{table}` not found')
+
+
+def get_queue_id_list(db_file):
+    sql_str = 'SELECT id FROM queue'
     connection = sqlite3.connect(db_file, timeout=30.0)
     cursor = connection.cursor()
     rows = cursor.execute(sql_str).fetchall()
     connection.close()
-    return rows
-
-
-def get_row(db_file, table):
-    sql_str = ''
-    if table == 'queue':
-        sql_str = 'SELECT * FROM queue'
-    else:
-        raise Exception(f'Table `{table}` not found')
-    connection = sqlite3.connect(db_file, timeout=30.0)
-    cursor = connection.cursor()
-    row = cursor.execute(sql_str).fetchone()
-    connection.close()
-    return row
+    return [row[0] for row in rows]
 
 
 def get_next_video(db_file):
@@ -145,6 +148,32 @@ def get_next_video(db_file):
         connection.rollback()
     connection.close()
     return (id, created, working_dir, absolute_filename, hostname)
+
+
+def retry(db_file, table):
+    id_list = get_queue_id_list(db_file)
+    sql_str_select = f'SELECT id, working_dir, absolute_filename FROM {table}'
+    sql_str_add = 'INSERT INTO queue(id, working_dir, absolute_filename) VALUES (?, ?, ?)'
+    sql_str_del = f'DELETE FROM {table} WHERE id = ?'
+    connection = sqlite3.connect(db_file, timeout=30.0)
+    connection.isolation_level = None
+    cursor = connection.cursor()
+    cursor.execute('BEGIN TRANSACTION')
+    try:
+        for row in cursor.execute(sql_str_select).fetchall():
+            next_number = find_first_missing_number(id_list)
+            id, working_dir, absolute_filename = row
+            print()
+            print(f'{id=}')
+            print(f'{absolute_filename=}')
+            cursor.execute(sql_str_add, (id, working_dir, absolute_filename))
+            cursor.execute(sql_str_del, (id,))
+            id_list.append(next_number)
+        connection.commit()
+    except sqlite3.Error as e:
+        print(f"Error: {e}")
+        connection.rollback()
+    connection.close()
 
 
 def add_row(db_file, table, data):
@@ -190,40 +219,39 @@ def add_rows(db_file, table, data_list):
 
 
 def del_row(db_file, table, id):
-    sql_str = ''
-    if table == 'queue':
-        sql_str = 'DELETE FROM queue WHERE id = ?'
-    elif table == 'running':
-        sql_str = 'DELETE FROM running WHERE id = ?'
-    elif table == 'completed':
-        sql_str = 'DELETE FROM completed WHERE id = ?'
-    elif table == 'failed':
-        sql_str = 'DELETE FROM failed WHERE id = ?'
+    table_tuple = ('queue', 'running', 'completed', 'failed')
+    if table in table_tuple:
+        sql_str = f'DELETE FROM {table} WHERE id = ?'
+        connection = sqlite3.connect(db_file, timeout=30.0)
+        cursor = connection.cursor()
+        cursor.execute(sql_str, (id,))
+        connection.commit()
+        connection.close()
     else:
         raise Exception(f'Table `{table}` not found')
-    connection = sqlite3.connect(db_file, timeout=30.0)
-    cursor = connection.cursor()
-    cursor.execute(sql_str, (id,))
-    connection.commit()
-    connection.close()
 
 
 def reset_table(db_file, table):
-    sql_str = ''
-    if table == 'queue':
-        sql_str = 'DELETE FROM queue'
-    elif table == 'completed':
-        sql_str = 'DELETE FROM completed'
-    elif table == 'failed':
-        sql_str = 'DELETE FROM failed'
+    table_tuple = ('queue', 'running', 'completed', 'failed')
+    if table in table_tuple:
+        sql_str = f'DELETE FROM {table}'
+        connection = sqlite3.connect(db_file, timeout=30.0)
+        cursor = connection.cursor()
+        cursor.execute(sql_str)
+        cursor.execute('DELETE FROM SQLITE_SEQUENCE WHERE name = ?', (table,))
+        connection.commit()
+        connection.close()
     else:
         raise Exception(f'Table `{table}` not found')
-    connection = sqlite3.connect(db_file, timeout=30.0)
-    cursor = connection.cursor()
-    cursor.execute(sql_str)
-    cursor.execute('DELETE FROM SQLITE_SEQUENCE WHERE name = ?', (table,))
-    connection.commit()
-    connection.close()
+
+
+def find_first_missing_number(number_list):
+    number_list.sort()
+    i = 1
+    while True:
+        if i not in number_list:
+            return i
+        i += 1
 
 
 def printOnSameLine(line):
@@ -271,9 +299,10 @@ def main():
     mode_list = [
         'server',
         'show',
-        'rmid',
+        'recursive',
         'reset',
-        'recursive'
+        'retry',
+        'rmid'
     ]
 
     os.makedirs(config_dir, exist_ok=True)
@@ -329,41 +358,39 @@ def main():
                 parser.parse_args(['--help'])
 
         elif args.mode[0] == 'show':
+            table_tuple = ('queue', 'running', 'completed', 'failed')
             if len(args.mode) != 2:
                 parser.parse_args(['--help'])
-            elif args.mode[1] == 'queue':
-                for row in get_rows(db_file, 'queue'):
-                    print(f'{row[0]}|{row[1]}|{row[2]}|{row[3]}|{row[4]}|{row[5]}')
-            elif args.mode[1] == 'completed':
-                for row in get_rows(db_file, 'completed'):
-                    print(f'{row[0]}|{row[1]}|{row[2]}|{row[3]}|{row[4]}|{row[5]}')
-            elif args.mode[1] == 'failed':
-                for row in get_rows(db_file, 'failed'):
-                    print(f'{row[0]}|{row[1]}|{row[2]}|{row[3]}|{row[4]}|{row[5]}')
+            elif args.mode[1] in table_tuple:
+                for row in get_rows(db_file, args.mode[1]):
+                    row_strings = [str(x) for x in row]
+                    print('|'.join(row_strings))
             else:
                 parser.parse_args(['--help'])
 
+        elif args.mode[0] == 'retry':
+            table_tuple = ('running', 'failed')
+            if len(args.mode) != 2:
+                parser.parse_args(['--help'])
+            elif args.mode[1] in table_tuple:
+                retry(db_file, args.mode[1])
+
+
         elif args.mode[0] == 'rmid':
+            table_tuple = ('queue', 'running', 'completed', 'failed')
             if len(args.mode) != 3:
                 parser.parse_args(['--help'])
-            elif args.mode[1] == 'queue':
-                del_row(db_file, 'queue', args.mode[2])
-            elif args.mode[1] == 'completed':
-                del_row(db_file, 'completed', args.mode[2])
-            elif args.mode[1] == 'failed':
-                del_row(db_file, 'failed', args.mode[2])
+            elif args.mode[1] in table_tuple:
+                del_row(db_file, args.mode[1], args.mode[2])
             else:
                 parser.parse_args(['--help'])
 
         elif args.mode[0] == 'reset':
+            table_tuple = ('queue', 'running', 'completed', 'failed')
             if len(args.mode) != 2:
                 parser.parse_args(['--help'])
-            elif args.mode[1] == 'queue':
-                reset_table(db_file, 'queue')
-            elif args.mode[1] == 'completed':
-                reset_table(db_file, 'completed')
-            elif args.mode[1] == 'failed':
-                reset_table(db_file, 'failed')
+            elif args.mode[1] in table_tuple:
+                reset_table(db_file, args.mode[1])
             else:
                 parser.parse_args(['--help'])
 
