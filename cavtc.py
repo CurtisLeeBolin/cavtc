@@ -53,7 +53,7 @@ def create_db(db_file):
         '''
         CREATE TABLE running (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            completed TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            started TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created TIMESTAMP NOT NULL,
             working_dir TEXT NOT NULL,
             absolute_filename TEXT NOT NULL,
@@ -65,6 +65,7 @@ def create_db(db_file):
         '''
         CREATE TABLE completed (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started TIMESTAMP NOT NULL,
             completed TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created TIMESTAMP NOT NULL,
             working_dir TEXT NOT NULL,
@@ -127,7 +128,7 @@ def get_queue_id_list(db_file):
 
 def get_next_video(db_file):
     hostname = socket.gethostname()
-    sql_str_select = 'SELECT * FROM queue'
+    sql_str_select = 'SELECT id, created, working_dir, absolute_filename FROM queue'
     sql_str_add = 'INSERT INTO running(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
     sql_str_del = 'DELETE FROM queue WHERE id = ?'
     connection = sqlite3.connect(db_file, timeout=30.0)
@@ -141,13 +142,13 @@ def get_next_video(db_file):
     try:
         id, created, working_dir, absolute_filename = cursor.execute(sql_str_select).fetchone()
         cursor.execute(sql_str_add, (created, working_dir, absolute_filename, hostname))
-        cursor.execute(sql_str_del, id)
+        cursor.execute(sql_str_del, (id,))
         connection.commit()
     except sqlite3.Error as e:
         print(f"Error: {e}")
         connection.rollback()
     connection.close()
-    return (id, created, working_dir, absolute_filename, hostname)
+    return (working_dir, absolute_filename)
 
 
 def retry(db_file, table):
@@ -180,8 +181,10 @@ def add_row(db_file, table, data):
     sql_str = ''
     if table == 'queue':
         sql_str = 'INSERT INTO queue(working_dir, absolute_filename) VALUES (?, ?)'
+    elif table == 'running':
+        sql_str = 'INSERT INTO running(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
     elif table == 'completed':
-        sql_str = 'INSERT INTO completed(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
+        sql_str = 'INSERT INTO completed(started, created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?, ?)'
     elif table == 'failed':
         sql_str = 'INSERT INTO failed(created, working_dir, absolute_filename, hostname, return_msg) VALUES (?, ?, ?, ?, ?)'
     else:
@@ -200,7 +203,7 @@ def add_rows(db_file, table, data_list):
     elif table == 'running':
         sql_str = 'INSERT INTO running(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
     elif table == 'completed':
-        sql_str = 'INSERT INTO completed(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
+        sql_str = 'INSERT INTO completed(started, created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?, ?)'
     elif table == 'failed':
         sql_str = 'INSERT INTO failed(created, working_dir, absolute_filename, hostname, return_msg) VALUES (?, ?, ?, ?, ?)'
     else:
@@ -264,22 +267,19 @@ def printOnSameLine(line):
 
 def server(db_file):
     while True:
-        id = 0
-        created = ''
         working_dir = ''
         absolute_filename = ''
-        hostname = ''
         try:
-            id, created, working_dir, absolute_filename, hostname = get_next_video(db_file)
+            working_dir, absolute_filename = get_next_video(db_file)
         except:
             time.sleep(1)
             continue
 
         tc = avtc.AudioVideoTransCoder([],disable_lockfile=True)
         return_msg = tc.transcode(absolute_filename, working_dir)
-
+        id, started, created, working_dir, absolute_filename, hostname = get_row(db_file, 'running')
         if return_msg == None:
-            add_row(db_file, 'completed', (created, working_dir, absolute_filename, hostname))
+            add_row(db_file, 'completed', (started, created, working_dir, absolute_filename, hostname))
             del_row(db_file, 'running', id)
             print()
         else:
