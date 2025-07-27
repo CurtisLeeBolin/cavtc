@@ -39,17 +39,27 @@ def create_db(db_file):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             working_dir TEXT NOT NULL,
-            absolute_filename TEXT NOT NULL,
-            running INTEGER CHECK (running IN (0, 1)) NOT NULL,
-            hostname TEXT
+            absolute_filename TEXT NOT NULL
         );
         '''
     )
     cursor.execute(
-        'INSERT INTO queue (id, working_dir, absolute_filename, running) VALUES (50000, "_", "_", 0);'
+        'INSERT INTO queue (id, working_dir, absolute_filename) VALUES (50000, "_", "_");'
     )
     cursor.execute(
         'DELETE FROM queue WHERE id = 50000;'
+    )
+    cursor.execute(
+        '''
+        CREATE TABLE running (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            completed TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created TIMESTAMP NOT NULL,
+            working_dir TEXT NOT NULL,
+            absolute_filename TEXT NOT NULL,
+            hostname TEXT NOT NULL
+        );
+        '''
     )
     cursor.execute(
         '''
@@ -84,6 +94,8 @@ def get_rows(db_file, table):
     sql_str = ''
     if table == 'queue':
         sql_str = 'SELECT * FROM queue'
+    elif table == 'running':
+        sql_str = 'SELECT * FROM completed'
     elif table == 'completed':
         sql_str = 'SELECT * FROM completed'
     elif table == 'failed':
@@ -100,7 +112,7 @@ def get_rows(db_file, table):
 def get_row(db_file, table):
     sql_str = ''
     if table == 'queue':
-        sql_str = 'SELECT id, created, working_dir, absolute_filename, running, hostname FROM queue'
+        sql_str = 'SELECT * FROM queue'
     else:
         raise Exception(f'Table `{table}` not found')
     connection = sqlite3.connect(db_file, timeout=30.0)
@@ -112,8 +124,9 @@ def get_row(db_file, table):
 
 def get_next_video(db_file):
     hostname = socket.gethostname()
-    sql_str_select = 'SELECT id, created, working_dir, absolute_filename FROM queue WHERE running = 0'
-    sql_str_update = 'UPDATE queue SET running = 1, hostname = ? WHERE id = ?'
+    sql_str_select = 'SELECT * FROM queue'
+    sql_str_add = 'INSERT INTO running(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
+    sql_str_del = 'DELETE FROM queue WHERE id = ?'
     connection = sqlite3.connect(db_file, timeout=30.0)
     connection.isolation_level = None
     cursor = connection.cursor()
@@ -124,7 +137,8 @@ def get_next_video(db_file):
     absolute_filename = ''
     try:
         id, created, working_dir, absolute_filename = cursor.execute(sql_str_select).fetchone()
-        cursor.execute(sql_str_update, (hostname, id))
+        cursor.execute(sql_str_add, (created, working_dir, absolute_filename, hostname))
+        cursor.execute(sql_str_del, id)
         connection.commit()
     except sqlite3.Error as e:
         print(f"Error: {e}")
@@ -136,7 +150,7 @@ def get_next_video(db_file):
 def add_row(db_file, table, data):
     sql_str = ''
     if table == 'queue':
-        sql_str = 'INSERT INTO queue(working_dir, absolute_filename, running) VALUES (?, ?, ?)'
+        sql_str = 'INSERT INTO queue(working_dir, absolute_filename) VALUES (?, ?)'
     elif table == 'completed':
         sql_str = 'INSERT INTO completed(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
     elif table == 'failed':
@@ -153,7 +167,9 @@ def add_row(db_file, table, data):
 def add_rows(db_file, table, data_list):
     sql_str = ''
     if table == 'queue':
-        sql_str = 'INSERT INTO queue(working_dir, absolute_filename, running) VALUES (?, ?, ?)'
+        sql_str = 'INSERT INTO queue(working_dir, absolute_filename) VALUES (?, ?)'
+    elif table == 'running':
+        sql_str = 'INSERT INTO running(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
     elif table == 'completed':
         sql_str = 'INSERT INTO completed(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
     elif table == 'failed':
@@ -177,6 +193,8 @@ def del_row(db_file, table, id):
     sql_str = ''
     if table == 'queue':
         sql_str = 'DELETE FROM queue WHERE id = ?'
+    elif table == 'running':
+        sql_str = 'DELETE FROM running WHERE id = ?'
     elif table == 'completed':
         sql_str = 'DELETE FROM completed WHERE id = ?'
     elif table == 'failed':
@@ -234,11 +252,11 @@ def server(db_file):
 
         if return_msg == None:
             add_row(db_file, 'completed', (created, working_dir, absolute_filename, hostname))
-            del_row(db_file, 'queue', id)
+            del_row(db_file, 'running', id)
             print()
         else:
             add_row(db_file, 'failed', (created, working_dir, absolute_filename, hostname, return_msg))
-            del_row(db_file, 'queue', id)
+            del_row(db_file, 'running', id)
             print(f'{return_msg=}')
             print()
 
