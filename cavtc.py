@@ -131,7 +131,7 @@ def get_next_video(db_file):
     sql_str_select = 'SELECT id, created, working_dir, absolute_filename FROM queue'
     sql_str_add = 'INSERT INTO running(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
     sql_str_del = 'DELETE FROM queue WHERE id = ?'
-    sql_str_select_id_running = 'SELECT last_insert_rowid();'
+    sql_str_select_id_running = 'SELECT last_insert_rowid()'
     sql_str_select_running = 'SELECT id, started, created, working_dir, absolute_filename, hostname FROM running WHERE id = ?'
     connection = sqlite3.connect(db_file, timeout=30.0)
     connection.isolation_level = None
@@ -147,9 +147,9 @@ def get_next_video(db_file):
     try:
         id, created, working_dir, absolute_filename = cursor.execute(sql_str_select).fetchone()
         cursor.execute(sql_str_add, (created, working_dir, absolute_filename, hostname))
-        id_running = cursor.execute(sql_str_select_id_running)
+        id_running = cursor.execute(sql_str_select_id_running).fectchone()[0]
         cursor.execute(sql_str_del, (id,))
-        id, started, created, working_dir, absolute_filename, hostname = cursor.execute(sql_str_select_running, (id_running,))
+        id, started, created, working_dir, absolute_filename, hostname = cursor.execute(sql_str_select_running, (id_running,)).fetchone()
         connection.commit()
     except sqlite3.Error as e:
         print(f"Error: {e}")
