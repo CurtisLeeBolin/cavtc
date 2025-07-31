@@ -147,7 +147,7 @@ def get_next_video(db_file):
     try:
         id, created, working_dir, absolute_filename = cursor.execute(sql_str_select).fetchone()
         cursor.execute(sql_str_add, (created, working_dir, absolute_filename, hostname))
-        id_running = cursor.execute(sql_str_select_id_running).fectchone()[0]
+        id_running = cursor.execute(sql_str_select_id_running).fetchone()[0]
         cursor.execute(sql_str_del, (id,))
         id, started, created, working_dir, absolute_filename, hostname = cursor.execute(sql_str_select_running, (id_running,)).fetchone()
         connection.commit()
