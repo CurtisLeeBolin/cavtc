@@ -129,26 +129,31 @@ def get_queue_id_list(db_file):
 def get_next_video(db_file):
     hostname = socket.gethostname()
     sql_str_select = 'SELECT id, created, working_dir, absolute_filename FROM queue'
-    sql_str_add = 'INSERT INTO running(created, working_dir, absolute_filename, hostname) VALUES (?, ?, ?, ?)'
+    sql_str_add = 'INSERT INTO running(created, working_dir, absolute_filename, hostname) OUTPUT INSERT.id VALUES (?, ?, ?, ?)'
     sql_str_del = 'DELETE FROM queue WHERE id = ?'
+    sql_str_select_running = 'SELECT id, started, created, working_dir, absolute_filename, hostname FROM running WHERE id = ?'
     connection = sqlite3.connect(db_file, timeout=30.0)
     connection.isolation_level = None
     cursor = connection.cursor()
     cursor.execute('BEGIN TRANSACTION')
+    id_running = 0
     id = 0
+    started = ''
     created = ''
     working_dir = ''
     absolute_filename = ''
+    hostname = ''
     try:
         id, created, working_dir, absolute_filename = cursor.execute(sql_str_select).fetchone()
-        cursor.execute(sql_str_add, (created, working_dir, absolute_filename, hostname))
+        id_running = cursor.execute(sql_str_add, (created, working_dir, absolute_filename, hostname))
         cursor.execute(sql_str_del, (id,))
+        id, started, created, working_dir, absolute_filename, hostname = cursor.execute(sql_str_select_running, (id_running,))
         connection.commit()
     except sqlite3.Error as e:
         print(f"Error: {e}")
         connection.rollback()
     connection.close()
-    return (working_dir, absolute_filename)
+    return (id, started, created, working_dir, absolute_filename, hostname)
 
 
 def retry(db_file, table):
@@ -267,17 +272,20 @@ def printOnSameLine(line):
 
 def server(db_file):
     while True:
+        id = 0
+        started = ''
+        created = ''
         working_dir = ''
         absolute_filename = ''
+        hostname = ''
         try:
-            working_dir, absolute_filename = get_next_video(db_file)
+            id, started, created, working_dir, absolute_filename, hostname = get_next_video(db_file)
         except:
             time.sleep(1)
             continue
 
         tc = avtc.AudioVideoTransCoder([],disable_lockfile=True)
         return_msg = tc.transcode(absolute_filename, working_dir)
-        id, started, created, working_dir, absolute_filename, hostname = get_row(db_file, 'running')
         if return_msg == None:
             add_row(db_file, 'completed', (started, created, working_dir, absolute_filename, hostname))
             del_row(db_file, 'running', id)
@@ -374,7 +382,6 @@ def main():
                 parser.parse_args(['--help'])
             elif args.mode[1] in table_tuple:
                 retry(db_file, args.mode[1])
-
 
         elif args.mode[0] == 'rmid':
             table_tuple = ('queue', 'running', 'completed', 'failed')
