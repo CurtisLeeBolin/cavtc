@@ -394,6 +394,8 @@ def main():
                 parser.parse_args(['--help'])
             elif args.mode[1] in table_tuple:
                 retry(db_file, args.mode[1])
+            else:
+                parser.parse_args(['--help'])
 
         elif args.mode[0] == 'rmid':
             table_tuple = ('queue', 'running', 'completed', 'failed')
