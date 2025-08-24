@@ -317,6 +317,7 @@ def main():
     config_dir = f'{home}/.tmp/'
     db_file = f'{config_dir}/.cavtc.db'
     mode_list = [
+        'files',
         'server',
         'show',
         'recursive',
@@ -340,21 +341,23 @@ def main():
     args = parser.parse_args()
 
     if len(args.mode) == 0:
-        tc = avtc.AudioVideoTransCoder([])
-        list_dir = os.listdir(working_dir)
-        list_dir.sort()
-        data_list = []
-        for file in list_dir:
-            filename_full, file_ext = os.path.splitext(file)
-            file_ext = file_ext[1:]
-            if tc.check_file_type(file_ext):
-                absolute_filename = os.path.join(working_dir, file)
-                data = (working_dir, absolute_filename, False)
-                data_list.append(data)
-        add_rows(db_file, 'queue', data_list)
-
+        parser.parse_args(['--help'])
     else:
-        if args.mode[0] == 'recursive':
+        if args.mode[0] == 'files':
+            tc = avtc.AudioVideoTransCoder([])
+            list_dir = os.listdir(working_dir)
+            list_dir.sort()
+            data_list = []
+            for file in list_dir:
+                filename_full, file_ext = os.path.splitext(file)
+                file_ext = file_ext[1:]
+                if tc.check_file_type(file_ext):
+                    absolute_filename = os.path.join(working_dir, file)
+                    data = (working_dir, absolute_filename)
+                    data_list.append(data)
+            add_rows(db_file, 'queue', data_list)
+
+        elif args.mode[0] == 'recursive':
             if len(args.mode) == 1:
                 exempt_list = ('0in', '0out')
                 tc = avtc.AudioVideoTransCoder([])
@@ -365,7 +368,7 @@ def main():
                         file_ext = file_ext[1:]
                         if tc.check_file_type(file_ext) and not any(s in root for s in exempt_list):
                             absolute_filename = os.path.join(root, file)
-                            data = (working_dir, absolute_filename, False)
+                            data = (working_dir, absolute_filename)
                             data_list.append(data)
                 add_rows(db_file, 'queue', data_list)
             else:
