@@ -278,14 +278,6 @@ def find_first_missing_number(number_list):
         i += 1
 
 
-def printOnSameLine(line):
-    columns, lines = os.get_terminal_size()
-    clear_line_string = ' ' * columns
-    line = line.replace('\n', '')
-    line = line[:columns]
-    print(f'\r{clear_line_string}\r{line}', end='')
-
-
 def server(db_file):
     while True:
         id = 0
