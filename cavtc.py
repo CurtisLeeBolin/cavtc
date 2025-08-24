@@ -162,11 +162,15 @@ def retry(db_file, table):
     connection = sqlite3.connect(db_file, timeout=30.0)
     cursor = connection.cursor()
     rows = cursor.execute(sql_str_select).fetchall()
-    data_list = list(rows)
     connection.close()
+    rows_list = list(rows)
+    data_list = []
+    for row in rows_list:
+        _, working_dir, absolute_filename = row
+        data_list.append([working_dir, absolute_filename])
     add_rows_lowest_id(db_file, 'queue', data_list)
     print(f'Deleting from table {table}:')
-    for id, working_dir, absolute_filename in data_list:
+    for id, working_dir, absolute_filename in rows_list:
         print(f'  {id=}\n  {working_dir=}\n  {absolute_filename=}\n')
         del_row(db_file, table, id)
 
@@ -180,7 +184,7 @@ def add_rows_lowest_id(db_file, table, data_list):
     if data_list != []:
         for row in data_list:
             next_number = find_first_missing_number(id_list)
-            id, working_dir, absolute_filename = row
+            working_dir, absolute_filename = row
             cursor.execute('BEGIN TRANSACTION')
             try:
                 cursor.execute(sql_str_add, (next_number, working_dir, absolute_filename))
@@ -355,22 +359,35 @@ def main():
                     absolute_filename = os.path.join(working_dir, file)
                     data = (working_dir, absolute_filename)
                     data_list.append(data)
-            add_rows(db_file, 'queue', data_list)
+            if len(args.mode) == 1:
+                add_rows(db_file, 'queue', data_list)
+            elif len(args.mode) == 2:
+                if args.mode[1] == 'lowest':
+                    add_rows_lowest_id(db_file, 'queue', data_list)
+                else:
+                    parser.parse_args(['--help'])
+            else:
+                parser.parse_args(['--help'])
 
         elif args.mode[0] == 'recursive':
+            exempt_list = ('0in', '0out')
+            tc = avtc.AudioVideoTransCoder([])
+            data_list = []
+            for root, dirs, files in os.walk(working_dir):
+                for file in files:
+                    filename_full, file_ext = os.path.splitext(file)
+                    file_ext = file_ext[1:]
+                    if tc.check_file_type(file_ext) and not any(s in root for s in exempt_list):
+                        absolute_filename = os.path.join(root, file)
+                        data = (working_dir, absolute_filename)
+                        data_list.append(data)
             if len(args.mode) == 1:
-                exempt_list = ('0in', '0out')
-                tc = avtc.AudioVideoTransCoder([])
-                data_list = []
-                for root, dirs, files in os.walk(working_dir):
-                    for file in files:
-                        filename_full, file_ext = os.path.splitext(file)
-                        file_ext = file_ext[1:]
-                        if tc.check_file_type(file_ext) and not any(s in root for s in exempt_list):
-                            absolute_filename = os.path.join(root, file)
-                            data = (working_dir, absolute_filename)
-                            data_list.append(data)
                 add_rows(db_file, 'queue', data_list)
+            elif len(args.mode) == 2:
+                if args.mode[1] == 'lowest':
+                    add_rows_lowest_id(db_file, 'queue', data_list)
+                else:
+                    parser.parse_args(['--help'])
             else:
                 parser.parse_args(['--help'])
 
