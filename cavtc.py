@@ -158,28 +158,39 @@ def get_next_video(db_file):
 
 
 def retry(db_file, table):
-    id_list = get_queue_id_list(db_file)
     sql_str_select = f'SELECT id, working_dir, absolute_filename FROM {table}'
+    connection = sqlite3.connect(db_file, timeout=30.0)
+    cursor = connection.cursor()
+    rows = cursor.execute(sql_str_select).fetchall()
+    data_list = list(rows)
+    connection.close()
+    add_rows_lowest_id(db_file, 'queue', data_list)
+    print(f'Deleting from table {table}:')
+    for id, working_dir, absolute_filename in data_list:
+        print(f'  {id=}\n  {working_dir=}\n  {absolute_filename=}\n')
+        del_row(db_file, table, id)
+
+
+def add_rows_lowest_id(db_file, table, data_list):
+    id_list = get_queue_id_list(db_file)
     sql_str_add = 'INSERT INTO queue(id, working_dir, absolute_filename) VALUES (?, ?, ?)'
-    sql_str_del = f'DELETE FROM {table} WHERE id = ?'
     connection = sqlite3.connect(db_file, timeout=30.0)
     connection.isolation_level = None
     cursor = connection.cursor()
-    cursor.execute('BEGIN TRANSACTION')
-    try:
-        for row in cursor.execute(sql_str_select).fetchall():
+    if data_list != []:
+        for row in data_list:
             next_number = find_first_missing_number(id_list)
             id, working_dir, absolute_filename = row
-            print()
-            print(f'{id=}')
-            print(f'{absolute_filename=}')
-            cursor.execute(sql_str_add, (id, working_dir, absolute_filename))
-            cursor.execute(sql_str_del, (id,))
-            id_list.append(next_number)
-        connection.commit()
-    except sqlite3.Error as e:
-        print(f"Error: {e}")
-        connection.rollback()
+            cursor.execute('BEGIN TRANSACTION')
+            try:
+                cursor.execute(sql_str_add, (next_number, working_dir, absolute_filename))
+                id_list.append(next_number)
+                connection.commit()
+            except sqlite3.Error as e:
+                print(f"Error: {e}")
+                connection.rollback()
+    else:
+        sys.exit(f'Error: Table {table} is empty.')
     connection.close()
 
 
