@@ -310,7 +310,7 @@ def main():
 
     home = os.environ.get('HOME')
     working_dir = os.getcwd()
-    config_dir = f'{home}/.tmp/'
+    config_dir = f'{home}/staging'
     db_file = f'{config_dir}/.cavtc.db'
     mode_list = [
         'files',
