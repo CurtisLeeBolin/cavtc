@@ -280,7 +280,7 @@ def find_first_missing_number(number_list):
         i += 1
 
 
-def server(db_file):
+def run(db_file):
     while True:
         id = 0
         started = ''
@@ -313,38 +313,119 @@ def main():
     working_dir = os.getcwd()
     config_dir = f'{home}/staging'
     db_file = f'{config_dir}/.cavtc.db'
-    mode_list = [
-        'files',
-        'server',
-        'show',
-        'recursive',
-        'reset',
-        'retry',
-        'rmid'
-    ]
 
     os.makedirs(config_dir, exist_ok=True)
 
     if not os.path.isfile(db_file):
         create_db(db_file)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        dest='mode',
-        nargs='*',
-        metavar='mode',
-        help='mode'
+    parser = argparse.ArgumentParser(
+      description='Cluster Audio Video TransCoder'
     )
+
+    subparsers = parser.add_subparsers(
+      dest='mode',
+      help='modes'
+    )
+
+    subparser_add = subparsers.add_parser(
+      'add',
+      help='adds all files in the current working directory'
+    )
+    group = subparser_add.add_mutually_exclusive_group()
+    group.add_argument(
+      '--recursive',
+      action='store_true',
+      help='recursively adds files'
+    )
+    group.add_argument(
+      '--file',
+      type=str,
+      help='add a single file'
+    )
+    subparser_add.add_argument(
+      '--lowest',
+      action='store_true',
+      help=''
+    )
+
+    subparser_list = subparsers.add_parser(
+      'list',
+      help='list rows in table'
+    )
+    subparser_list.add_argument(
+      'table',
+      choices=('queue', 'running', 'completed', 'failed'),
+      help='table to list rows'
+    )
+
+    subparser_reset = subparsers.add_parser(
+      'reset',
+      help='reset table'
+    )
+    subparser_reset.add_argument(
+      'table',
+      choices=('queue', 'running', 'completed', 'failed'),
+      help='table to reset'
+    )
+
+    subparser_retry = subparsers.add_parser(
+      'retry',
+      help='retry table'
+    )
+    subparser_reset.add_argument(
+      'table',
+      choices=('running', 'failed'),
+      help='table to retry'
+    )
+
+    subparser_rmid = subparsers.add_parser(
+      'rmid',
+      help='remove table row by id'
+    )
+    subparser_rmid.add_argument(
+      'table',
+      choices=('queue', 'running', 'completed', 'failed'),
+      help='table to remove row'
+    )
+    subparser_rmid.add_argument(
+      'id',
+      type=int,
+      help='id of row to remove'
+    )
+
+    subparser_run = subparsers.add_parser(
+      'run',
+      help='run transcoder'
+    )
+
     args = parser.parse_args()
 
-    if len(args.mode) == 0:
-        parser.parse_args(['--help'])
-    else:
-        if args.mode[0] == 'files':
-            tc = avtc.AudioVideoTransCoder([])
+    if args.mode == 'add':
+        tc = avtc.AudioVideoTransCoder([])
+        data_list = []
+        if args.recursive:
+            exempt_list = ('0in', '0out')
+            for root, dirs, files in os.walk(working_dir):
+                for file in files:
+                    print(file)
+                    print(root)
+                    filename_full, file_ext = os.path.splitext(file)
+                    file_ext = file_ext[1:]
+                    if tc.check_file_type(file_ext) and not any(s in root for s in exempt_list):
+                        absolute_filename = os.path.join(root, file)
+                        data = (working_dir, absolute_filename)
+                        data_list.append(data)
+        if args.file:
+            filename_full, file_ext = os.path.splitext(args.file)
+            file_ext = file_ext[1:]
+            if tc.check_file_type(file_ext):
+                absolute_filename = os.path.join(working_dir, args.file)
+                data = (working_dir, absolute_filename)
+                data_list.append(data)
+        else:
             list_dir = os.listdir(working_dir)
             list_dir.sort()
-            data_list = []
             for file in list_dir:
                 filename_full, file_ext = os.path.splitext(file)
                 file_ext = file_ext[1:]
@@ -352,85 +433,32 @@ def main():
                     absolute_filename = os.path.join(working_dir, file)
                     data = (working_dir, absolute_filename)
                     data_list.append(data)
-            if len(args.mode) == 1:
-                add_rows(db_file, 'queue', data_list)
-            elif len(args.mode) == 2:
-                if args.mode[1] == 'lowest':
-                    add_rows_lowest_id(db_file, 'queue', data_list)
-                else:
-                    parser.parse_args(['--help'])
-            else:
-                parser.parse_args(['--help'])
-
-        elif args.mode[0] == 'recursive':
-            exempt_list = ('0in', '0out')
-            tc = avtc.AudioVideoTransCoder([])
-            data_list = []
-            for root, dirs, files in os.walk(working_dir):
-                for file in files:
-                    filename_full, file_ext = os.path.splitext(file)
-                    file_ext = file_ext[1:]
-                    if tc.check_file_type(file_ext) and not any(s in root for s in exempt_list):
-                        absolute_filename = os.path.join(root, file)
-                        data = (working_dir, absolute_filename)
-                        data_list.append(data)
-            if len(args.mode) == 1:
-                add_rows(db_file, 'queue', data_list)
-            elif len(args.mode) == 2:
-                if args.mode[1] == 'lowest':
-                    add_rows_lowest_id(db_file, 'queue', data_list)
-                else:
-                    parser.parse_args(['--help'])
-            else:
-                parser.parse_args(['--help'])
-
-        elif args.mode[0] == 'server':
-            if len(args.mode) == 1:
-                server(db_file)
-            else:
-                parser.parse_args(['--help'])
-
-        elif args.mode[0] == 'show':
-            table_tuple = ('queue', 'running', 'completed', 'failed')
-            if len(args.mode) != 2:
-                parser.parse_args(['--help'])
-            elif args.mode[1] in table_tuple:
-                for row in get_rows(db_file, args.mode[1]):
-                    row_strings = [str(x) for x in row]
-                    print('|'.join(row_strings))
-            else:
-                parser.parse_args(['--help'])
-
-        elif args.mode[0] == 'retry':
-            table_tuple = ('running', 'failed')
-            if len(args.mode) != 2:
-                parser.parse_args(['--help'])
-            elif args.mode[1] in table_tuple:
-                retry(db_file, args.mode[1])
-            else:
-                parser.parse_args(['--help'])
-
-        elif args.mode[0] == 'rmid':
-            table_tuple = ('queue', 'running', 'completed', 'failed')
-            if len(args.mode) != 3:
-                parser.parse_args(['--help'])
-            elif args.mode[1] in table_tuple:
-                del_row(db_file, args.mode[1], args.mode[2])
-            else:
-                parser.parse_args(['--help'])
-
-        elif args.mode[0] == 'reset':
-            table_tuple = ('queue', 'running', 'completed', 'failed')
-            if len(args.mode) != 2:
-                parser.parse_args(['--help'])
-            elif args.mode[1] in table_tuple:
-                reset_table(db_file, args.mode[1])
-            else:
-                parser.parse_args(['--help'])
-
+        if args.lowest:
+            add_rows_lowest_id(db_file, 'queue', data_list)
         else:
-            parser.parse_args(['--help'])
+            print(data_list)
+            add_rows(db_file, 'queue', data_list)
+
+    elif args.mode == 'list':
+        for row in get_rows(db_file, args.table):
+            row_strings = [str(x) for x in row]
+            print('|'.join(row_strings))
+
+    elif args.mode == 'retry':
+        retry(db_file, args.table)
+
+    elif args.mode == 'rmid':
+        del_row(db_file, args.table, args.id)
+
+    elif args.mode == 'reset':
+        reset_table(db_file, args.table)
+
+    elif args.mode == 'run':
+        run(db_file)
+
+    else:
+        parser.parse_args(['--help'])
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
