@@ -373,7 +373,7 @@ def main():
       'retry',
       help='retry table'
     )
-    subparser_reset.add_argument(
+    subparser_retry.add_argument(
       'table',
       choices=('running', 'failed'),
       help='table to retry'
