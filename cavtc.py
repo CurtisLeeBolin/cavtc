@@ -46,7 +46,7 @@ def create_db(db_file):
         '''
     )
     cursor.execute(
-        'INSERT INTO queue (id, working_dir, absolute_filename) VALUES (50000, "_", "_");'
+        '''INSERT INTO queue (id, working_dir, absolute_filename) VALUES (50000, '_', '_');'''
     )
     cursor.execute(
         'DELETE FROM queue WHERE id = 50000;'
