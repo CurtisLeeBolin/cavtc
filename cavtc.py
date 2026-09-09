@@ -408,8 +408,8 @@ def main():
             exempt_list = ('0in', '0out')
             for root, dirs, files in os.walk(working_dir):
                 for file in files:
-                    print(file)
-                    print(root)
+                    #print(file)
+                    #print(root)
                     filename_full, file_ext = os.path.splitext(file)
                     file_ext = file_ext[1:]
                     if tc.check_file_type(file_ext) and not any(s in root for s in exempt_list):
@@ -436,7 +436,7 @@ def main():
         if args.lowest:
             add_rows_lowest_id(db_file, 'queue', data_list)
         else:
-            print(data_list)
+            #print(data_list)
             add_rows(db_file, 'queue', data_list)
 
     elif args.mode == 'list':
