@@ -291,7 +291,7 @@ def run(db_file):
         try:
             id, started, created, working_dir, absolute_filename, hostname = get_next_video(db_file)
         except:
-            time.sleep(secrets.randbelow(6) + 5)
+            time.sleep(secrets.randbelow(30) + 120)
             continue
         tc = avtc.AudioVideoTransCoder([],disable_lockfile=True)
         return_msg = tc.transcode(absolute_filename, working_dir)
