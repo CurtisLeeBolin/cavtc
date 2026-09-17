@@ -440,9 +440,11 @@ def main():
             add_rows(db_file, 'queue', data_list)
 
     elif args.mode == 'list':
-        for row in get_rows(db_file, args.table):
+        for i, row in enumerate(get_rows(db_file, args.table)):
+            if i != 0:
+                print()
             row_strings = [str(x) for x in row]
-            print('|'.join(row_strings))
+            print('\n'.join(row_strings))
 
     elif args.mode == 'retry':
         retry(db_file, args.table)
