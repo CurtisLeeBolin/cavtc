@@ -421,7 +421,7 @@ def main():
                 absolute_filename = os.path.join(working_dir, args.file)
                 data = (working_dir, absolute_filename)
                 data_list.append(data)
-        else:
+        if not args.recursive and not args.file:
             list_dir = os.listdir(working_dir)
             list_dir.sort()
             for file in list_dir:
