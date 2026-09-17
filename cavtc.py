@@ -290,7 +290,7 @@ def run(db_file):
         hostname = ''
         try:
             id, started, created, working_dir, absolute_filename, hostname = get_next_video(db_file)
-        except:
+        except sqlite3.Error:
             time.sleep(secrets.randbelow(30) + 120)
             continue
         tc = avtc.AudioVideoTransCoder([],disable_lockfile=True)
